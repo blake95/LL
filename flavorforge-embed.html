@@ -85,9 +85,15 @@
             top: 60px;
             left: 0;
             right: 0;
-            bottom: 60px;
+            bottom: 0;
             padding: 15px;
             overflow-y: auto;
+            transition: bottom 0.3s ease;
+        }
+        
+        /* Apply padding at the bottom of content when nav is visible */
+        .nav-visible .content {
+            bottom: 60px;
         }
         
         .section-title {
@@ -462,10 +468,16 @@
         .nav-peek.visible {
             opacity: 1;
         }
+        
+        /* Extra space at the bottom of content to prevent content being hidden behind nav */
+        .content-bottom-padding {
+            height: 15px;
+            width: 100%;
+        }
     </style>
 </head>
 <body>
-    <div class="app-container">
+    <div class="app-container" id="appContainer">
         <div class="app-header">
             <div class="logo">FlavorForge</div>
             <div class="icons">
@@ -475,7 +487,7 @@
         </div>
         
         <!-- Create Screen -->
-        <div id="createScreen" class="screen active">
+        <div id="createScreen" class="screen">
             <div class="content">
                 <div class="feature-tag">Create Custom Blends</div>
                 <div class="section-title">Your Spice Collection</div>
@@ -586,11 +598,14 @@
                         <span class="rating-star">★</span>4.7
                     </div>
                 </div>
+                
+                <!-- Add bottom padding to prevent content being hidden behind nav -->
+                <div class="content-bottom-padding"></div>
             </div>
         </div>
         
         <!-- Discover Screen -->
-        <div id="discoverScreen" class="screen">
+        <div id="discoverScreen" class="screen active">
             <div class="content">
                 <div class="feature-tag">AI Recommendations</div>
                 <div class="section-title">Suggested For You</div>
@@ -696,6 +711,9 @@
                         <span class="rating-star">★</span>4.8
                     </div>
                 </div>
+                
+                <!-- Add bottom padding to prevent content being hidden behind nav -->
+                <div class="content-bottom-padding"></div>
             </div>
         </div>
         
@@ -706,8 +724,8 @@
                 <div class="section-title">Monthly Spice Box</div>
                 
                 <div class="subscription-box">
-                    <div class="box-title">Trendy Blends Box</div>
-                    <div class="box-description">Receive 3 trending spice blends each month, curated based on community favorites and seasonal themes.</div>
+                    <div class="box-title">AI Surprise Box</div>
+                    <div class="box-description">Receive 3 surprise spice blends each month, personally selected by our AI based on your unique taste profile and preferences!</div>
                     <div class="box-price">$19.99/month</div>
                     <button class="subscribe-btn">Subscribe Now</button>
                 </div>
@@ -767,6 +785,9 @@
                         <div class="product-price">$6.49</div>
                     </div>
                 </div>
+                
+                <!-- Add bottom padding to prevent content being hidden behind nav -->
+                <div class="content-bottom-padding"></div>
             </div>
         </div>
         
@@ -775,7 +796,7 @@
         
         <!-- Bottom navigation bar -->
         <div id="bottomNav" class="bottom-nav">
-            <div id="discoverNav" class="nav-item">
+            <div id="discoverNav" class="nav-item active">
                 <div class="nav-icon">🔍</div>
                 <div>Discover</div>
             </div>
@@ -783,7 +804,7 @@
                 <div class="nav-icon">🛒</div>
                 <div>Shop</div>
             </div>
-            <div id="createNav" class="nav-item active">
+            <div id="createNav" class="nav-item">
                 <div class="nav-icon">➕</div>
                 <div>Create</div>
             </div>
@@ -797,6 +818,7 @@
         const createNav = document.getElementById('createNav');
         const bottomNav = document.getElementById('bottomNav');
         const navPeek = document.getElementById('navPeek');
+        const appContainer = document.getElementById('appContainer');
         
         // Get screen elements
         const discoverScreen = document.getElementById('discoverScreen');
@@ -805,6 +827,9 @@
         
         // Get all content elements
         const contentElements = document.querySelectorAll('.content');
+        
+        // Add class to app container to control content padding
+        appContainer.classList.add('nav-visible');
         
         // Function to activate a screen
         function activateScreen(screen, navItem) {
@@ -828,6 +853,7 @@
             // Show the navigation bar when switching screens
             bottomNav.classList.remove('nav-hidden');
             navPeek.classList.remove('visible');
+            appContainer.classList.add('nav-visible');
             
             // Reset scroll variables
             lastScrollTop = 0;
@@ -867,6 +893,7 @@
                         scrollDirection = 'down';
                         bottomNav.classList.add('nav-hidden');
                         navPeek.classList.add('visible');
+                        appContainer.classList.remove('nav-visible');
                     }
                 } else {
                     // Scrolling up
@@ -874,6 +901,7 @@
                         scrollDirection = 'up';
                         bottomNav.classList.remove('nav-hidden');
                         navPeek.classList.remove('visible');
+                        appContainer.classList.add('nav-visible');
                     }
                 }
                 lastScrollTop = currentScrollTop;
@@ -903,6 +931,7 @@
         navPeek.addEventListener('click', function() {
             bottomNav.classList.remove('nav-hidden');
             navPeek.classList.remove('visible');
+            appContainer.classList.add('nav-visible');
         });
         
         // Add some interactivity to buttons
@@ -935,6 +964,9 @@
         
         // Trigger loading animation when switching to discover tab
         discoverNav.addEventListener('click', simulateLoading);
+        
+        // Trigger loading on initial load since Discover is now default
+        simulateLoading();
     </script>
 </body>
 </html>
