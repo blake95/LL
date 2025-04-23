@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Sequential Evaluation Visualization (Deterministic Selection)</title>
+    <style>
+        /* Base Styles */
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f4f7f9;
+            color: #333;
+        }
+        .container { max-width: 1300px; margin: auto; }
+        h1, h2 { text-align: center; color: #2c3e50; }
+        .section {
+            background-color: #fff;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+
+        /* Controls & Navigation */
+        .controls { display: flex; flex-direction: column; align-items: center; gap: 15px; margin-bottom: 20px; padding: 15px; background-color: #eef2f7; border-radius: 5px; }
+        .novelty-control label { display: block; text-align: center; margin-bottom: 5px; font-weight: 500; }
+        .novelty-control input[type="range"] { width: 200px; cursor: pointer;}
+        .novelty-control .labels { display: flex; justify-content: space-between; font-size: 0.8em; color: #555; width: 200px; margin: 2px auto 0 auto;}
+        .navigation { display: flex; gap: 10px; align-items: center;}
+        .navigation button { padding: 8px 15px; border: none; border-radius: 4px; background-color: #3498db; color: white; font-size: 0.9em; cursor: pointer; transition: background-color 0.2s; }
+        .navigation button:disabled { background-color: #bdc3c7; cursor: not-allowed; }
+        .navigation button:hover:not(:disabled) { background-color: #2980b9; }
+        .stage-display { background-color: #fff; padding: 8px 12px; border-radius: 4px; box-shadow: inset 0 1px 3px rgba(0,0,0,0.1); font-weight: 500;}
+        .stage-description { text-align: center; padding: 10px; background-color: #e8f6fd; border: 1px solid #bde0fe; border-radius: 5px; margin-bottom: 20px; font-weight: 500;}
+
+        /* Tree Layout */
+        .trees-container { display: flex; flex-wrap: wrap; justify-content: space-around; gap: 20px; }
+        .tree-wrapper { border: 1px solid #d1d9e6; border-radius: 6px; padding: 15px; background-color: #ffffff; text-align: center; flex: 1; min-width: 320px; max-width: 380px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);}
+        .tree-title { font-weight: bold; font-size: 1.1em; margin-bottom: 10px; }
+        svg { display: block; margin: 10px auto; max-width: 100%; height: auto; overflow: visible;}
+
+        /* SVG Element Base Styles */
+        .node { r: 18; fill: #f8f9fa; stroke: #333; stroke-width: 2; }
+        .node-text { font-size: 11px; font-weight: 500; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+        .trunk-line { stroke-width: 4; stroke-linecap: round; }
+        .branch-line { stroke-linecap: round; transition: stroke-width 0.3s ease-out, opacity 0.4s ease-out, stroke 0.3s; }
+        .branch-label { font-size: 10px; text-anchor: middle; pointer-events: none; transition: fill 0.3s, opacity 0.4s; }
+        .outcome-group { transition: opacity 0.4s ease-out; }
+        .outcome-node { r: 12; fill: #fff; stroke-width: 1.5; transition: stroke 0.3s;}
+        .outcome-text { font-size: 9px; font-weight: 500; text-anchor: middle; dominant-baseline: central; pointer-events: none; }
+        .outcome-branch { stroke-linecap: round; transition: stroke-width 0.3s ease-out;}
+        .ev-box { rx: 5; fill: #ffffff; stroke-width: 1.5; transition: opacity 0.4s ease-out; }
+        .ev-label { font-size: 9px; text-anchor: middle; pointer-events: none; fill: #333; }
+        .ev-value { font-size: 14px; font-weight: bold; text-anchor: middle; pointer-events: none; transition: fill 0.3s;}
+        .final-ev-value { font-size: 16px; }
+        .stage1-criterion-label, .stage4-lens-label {
+            font-size: 10px;
+            text-anchor: start; /* Align text to the left of the X coordinate */
+            transition: opacity 0.4s ease-out;
+            font-weight: 500;
+            pointer-events: none;
+        }
+        .novelty-indicator { stroke: #333; stroke-width: 1; }
+        .novelty-text { font-size: 10px; font-weight: 500; text-anchor: middle; dominant-baseline: central; }
+
+        /* Color Overrides */
+        .text-perfect, .stroke-perfect-ev { stroke: #34495e; fill: #34495e;}
+        .stroke-perfect-trunk, .stroke-perfect-branch-attended { stroke: #7f8c8d;}
+        .stroke-perfect-branch { stroke: #b0bec5;}
+        .fill-perfect-leaf { fill: #eceff1; stroke: #90a4ae;}
+        .text-opportunity, .stroke-opportunity-ev { stroke: #27ae60; fill: #27ae60;}
+        .stroke-opportunity-trunk, .stroke-opportunity-branch-attended { stroke: #27ae60;}
+        .stroke-opportunity-branch { stroke: #abebc6;}
+        .fill-opportunity-leaf { fill: #eafaf1; stroke: #2ecc71;}
+        .text-risk, .stroke-risk-ev { stroke: #c0392b; fill: #c0392b;}
+        .stroke-risk-trunk, .stroke-risk-branch-attended { stroke: #c0392b;}
+        .stroke-risk-branch { stroke: #f5b7b1;}
+        .fill-risk-leaf { fill: #fadbd8; stroke: #e74c3c;}
+
+        /* Pruning Styles */
+        .label-pruned { fill: #bdbdbd !important; }
+        .line-pruned { stroke: #e0e0e0 !important; }
+        .pruned-group { opacity: 0.15 !important; transition: opacity 0.4s ease-out; } /* Added transition */
+
+        /* Visibility */
+        .hidden { display: none; }
+        .invisible { opacity: 0; pointer-events: none; transition: opacity 0.4s ease-out; } /* For smooth transitions */
+        .visible { opacity: 1; transition: opacity 0.4s ease-out; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Interactive Sequential Evaluation Visualization</h1>
+        <!-- Controls -->
+        <div class="section">
+             <div class="controls">
+                <div class="novelty-control">
+                    <label for="novelty-slider">Venture Novelty: <span id="novelty-value">0.8</span></label>
+                    <input type="range" id="novelty-slider" min="0" max="1" step="0.1" value="0.8">
+                    <div class="labels"><span>Conventional</span><span>Novel</span></div>
+                </div>
+                <div class="navigation">
+                    <button id="prev-stage">Prev Stage</button>
+                    <div class="stage-display">Stage: <span id="stage-num">1</span> / <span id="total-stages">5</span></div>
+                    <button id="next-stage">Next Stage</button>
+                </div>
+            </div>
+             <div class="stage-description" id="stage-description">Initial State description...</div>
+        </div>
+
+        <!-- Trees -->
+        <div class="trees-container">
+            <div class="tree-wrapper">
+                <div id="title-ideal" class="tree-title text-perfect">Ideal Bayesian</div>
+                <svg id="ideal-tree" width="340" height="500" viewBox="0 0 340 500"></svg>
+            </div>
+            <div class="tree-wrapper">
+                 <div id="title-opportunity" class="tree-title text-opportunity">Opportunity-First (O→R)</div>
+                 <svg id="opportunity-tree" width="340" height="500" viewBox="0 0 340 500"></svg>
+            </div>
+           <div class="tree-wrapper">
+                 <div id="title-risk" class="tree-title text-risk">Risk-First (R→O)</div>
+                 <svg id="risk-tree" width="340" height="500" viewBox="0 0 340 500"></svg>
+            </div>
+        </div>
+
+        <!-- Parameters -->
+         <div class="section">
+              <h2 style="font-size: 1.2em; margin-bottom: 15px;">Model Parameters</h2>
+             <div style="display: flex; justify-content: space-around; text-align: center; font-weight: 500;">
+                <div><p id="param-m">m = 6</p><p style="font-size: 0.85em; color: #555; font-weight: normal;">Total Pathways</p></div>
+                <div><p id="param-k">K = 3</p><p style="font-size: 0.85em; color: #555; font-weight: normal;">Attention Capacity</p></div>
+                <div><p id="param-n">n = 3</p><p style="font-size: 0.85em; color: #555; font-weight: normal;">Outcomes/Pathway</p></div>
+             </div>
+        </div>
+
+    </div> <!-- /container -->
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+
+        // --- Model Constants & Parameters ---
+        const M = 6; // Total pathways
+        const N = 3; // Outcomes per pathway
+        const K = 3; // Attention capacity
+        const TOTAL_STAGES = 5; // Number of visualization steps
+        const OUTCOME_VALUES = [ // Fixed outcome values for each pathway
+            [105, 100, 95], [90, 85, 80], [75, 70, 65],
+            [60, 55, 50], [45, 40, 35], [30, 25, 20],
+        ];
+        const AVG_PAYOFFS = OUTCOME_VALUES.map(v => v.reduce((s, c) => s + c, 0) / v.length);
+        const maxAvgPayoff = Math.max(...AVG_PAYOFFS);
+        const minAvgPayoff = Math.min(...AVG_PAYOFFS);
+        const rangeAvgPayoff = maxAvgPayoff - minAvgPayoff + 1e-9; // Add epsilon for division safety
+
+        // Likelihoods derived from average payoffs
+        const OPPORTUNITY_LIKELIHOODS = AVG_PAYOFFS.map(p => 0.1 + 0.89 * ((p - minAvgPayoff) / rangeAvgPayoff));
+        const RISK_LIKELIHOODS = AVG_PAYOFFS.map(p => 0.1 + 0.89 * ((maxAvgPayoff - p) / rangeAvgPayoff));
+        const PERFECT_ATTENDED_INDICES = Array.from({ length: M }, (_, i) => i); // Ideal Bayesian attends to all
+
+        // --- State Variables ---
+        let currentStage = 0;
+        let currentNovelty = 0.8;
+        let currentPriors = [];
+        let oppFirstAttendedIndices = [];
+        let riskFirstAttendedIndices = [];
+        let oppFirstStage1Results = { pathwayProbs: {}, ev: 0 };
+        let riskFirstStage1Results = { pathwayProbs: {}, ev: 0 };
+        let oppFirstStage2EV = 0;
+        let riskFirstStage2EV = 0;
+        let idealEV = 0;
+        let idealPathwayProbs = {};
+        let currentOutcomeProbs = { ideal: {}, opportunity: {}, risk: {} };
+
+        // --- DOM Element References ---
+        const noveltySlider = document.getElementById('novelty-slider');
+        const noveltyValueSpan = document.getElementById('novelty-value');
+        const prevStageBtn = document.getElementById('prev-stage');
+        const nextStageBtn = document.getElementById('next-stage');
+        const stageNumSpan = document.getElementById('stage-num');
+        const totalStagesSpan = document.getElementById('total-stages');
+        const stageDescP = document.getElementById('stage-description');
+        const idealSvg = document.getElementById('ideal-tree');
+        const oppSvg = document.getElementById('opportunity-tree');
+        const riskSvg = document.getElementById('risk-tree');
+
+        // Check for essential elements
+        if (!noveltySlider || !prevStageBtn || !nextStageBtn || !idealSvg || !oppSvg || !riskSvg) {
+            console.error("DOM Initialization Error: One or more essential elements not found.");
+            return;
+        }
+
+        // --- Initialization ---
+        document.getElementById('param-m').textContent = `m = ${M}`;
+        document.getElementById('param-k').textContent = `K = ${K}`;
+        document.getElementById('param-n').textContent = `n = ${N}`;
+        totalStagesSpan.textContent = TOTAL_STAGES;
+
+        // --- Calculation Functions (Identical to previous version) ---
+
+        /** Generates prior probabilities based on novelty level. */
+        function generatePriors(noveltyLevel) {
+            const basePriors = [0.55, 0.25, 0.10, 0.05, 0.03, 0.02];
+            const uniform = 1 / M;
+            const power = 3;
+            const effectiveNovelty = Math.pow(noveltyLevel, power);
+            const calculatedPriors = basePriors.map(p => p * (1 - effectiveNovelty) + uniform * effectiveNovelty);
+            const sum = calculatedPriors.reduce((a, b) => a + b, 0);
+            if (sum <= 0) return Array(M).fill(uniform);
+            return calculatedPriors.map(p => p / sum);
+        }
+
+        /** Determines the set of attended pathways deterministically. */
+        function determineAttendedSet_Deterministic(priors, criterion, k) {
+            if (!priors || priors.length === 0 || k <= 0) return [];
+            const boostFactor = 4;
+            const selectionScores = Array.from({ length: M }, (_, i) => {
+                let boost = 1.0;
+                if (criterion === 'O') {
+                    boost = 1 + boostFactor * ((AVG_PAYOFFS[i] - minAvgPayoff) / rangeAvgPayoff);
+                } else if (criterion === 'R') {
+                    boost = 1 + boostFactor * ((maxAvgPayoff - AVG_PAYOFFS[i]) / rangeAvgPayoff);
+                }
+                const score = (priors[i] || 0) * boost;
+                return { index: i, score: isNaN(score) ? 0 : score };
+            });
+            selectionScores.sort((a, b) => b.score - a.score);
+            return selectionScores.slice(0, k).map(item => item.index);
+        }
+
+        /** Calculates posterior probabilities for attended pathways. */
+        function calculateStage1Posteriors(priors, likelihoods, attendedIndices) {
+            const pathwayProbs = {};
+            if (!attendedIndices || attendedIndices.length === 0) return pathwayProbs;
+            let Z_A = 0;
+            attendedIndices.forEach(idx => { Z_A += (likelihoods[idx] || 0) * (priors[idx] || 0); });
+            if (Z_A === 0) Z_A = 1e-9;
+            attendedIndices.forEach(idx => {
+                const posteriorProb = ((likelihoods[idx] || 0) * (priors[idx] || 0)) / Z_A;
+                pathwayProbs[idx] = isNaN(posteriorProb) ? 0 : posteriorProb;
+            });
+            return pathwayProbs;
+        }
+
+        /** Determines outcome probabilities within a pathway based on the criterion. */
+        function getOutcomeProbs(pathwayIndex, criterion) {
+            const values = [...OUTCOME_VALUES[pathwayIndex]];
+            const n_outcomes = values.length;
+            if (n_outcomes !== 3) return Array(n_outcomes).fill(1 / n_outcomes);
+            const indexedValues = values.map((value, index) => ({ value, index }));
+            indexedValues.sort((a, b) => a.value - b.value);
+            let weights = [];
+            if (criterion === 'O') { weights = [1, 2, 3]; }
+            else if (criterion === 'R') { weights = [3, 2, 1]; }
+            else { return Array(n_outcomes).fill(1 / n_outcomes); }
+            const totalWeight = weights.reduce((s, w) => s + w, 0);
+            const probabilities = weights.map(w => w / totalWeight);
+            const finalProbs = Array(n_outcomes).fill(0);
+            indexedValues.forEach((item, sortedIndex) => { finalProbs[item.index] = probabilities[sortedIndex]; });
+            return finalProbs;
+        }
+
+        /** Calculates the EV for a single pathway. */
+        function calculatePathwayEV(pathwayIndex, outcomeProbs) {
+             let ev = 0;
+             const values = OUTCOME_VALUES[pathwayIndex];
+             for (let j = 0; j < values.length; j++) { ev += (outcomeProbs[j] || 0) * values[j]; }
+             return ev;
+        }
+
+        /** Calculates the Intermediate EV. */
+        function calculateIntermediateEV(pathwayProbs, attendedIndices, firstCriterion) {
+            let ev = 0;
+            attendedIndices.forEach(idx => {
+                const outcomeProbs = getOutcomeProbs(idx, firstCriterion);
+                const pathwayEV = calculatePathwayEV(idx, outcomeProbs);
+                ev += (pathwayProbs[idx] || 0) * pathwayEV;
+            });
+            return Math.round(ev);
+        }
+
+        /** Calculates the Final EV. */
+        function calculateFinalEV(pathwayProbs, attendedIndices, secondCriterion) {
+              let ev = 0;
+              attendedIndices.forEach(idx => {
+                  const outcomeProbs = getOutcomeProbs(idx, secondCriterion);
+                  const pathwayEV = calculatePathwayEV(idx, outcomeProbs);
+                  ev += (pathwayProbs[idx] || 0) * pathwayEV;
+              });
+              return Math.round(ev);
+        }
+
+        /** Calculates probabilities and EV for the Ideal Bayesian benchmark. */
+        function calculateIdealProbsAndEV(priors) {
+              const results = { pathwayProbs: {}, ev: 0 };
+              if (!priors || priors.length === 0) return results;
+              const integratedLikelihood = priors.map((_, idx) => (OPPORTUNITY_LIKELIHOODS[idx] || 0.1) * (RISK_LIKELIHOODS[idx] || 0.1));
+              let Z_ideal = 0;
+              priors.forEach((prior, idx) => { Z_ideal += integratedLikelihood[idx] * prior; });
+              if (Z_ideal === 0) Z_ideal = 1e-9;
+              let idealEVCalc = 0;
+              priors.forEach((prior, idx) => {
+                  const posteriorProb = (integratedLikelihood[idx] * prior) / Z_ideal;
+                  results.pathwayProbs[idx] = isNaN(posteriorProb) ? 0 : posteriorProb;
+                  const idealOutcomeProbs = getOutcomeProbs(idx, 'Ideal');
+                  const pathwayValueIdeal = calculatePathwayEV(idx, idealOutcomeProbs);
+                  idealEVCalc += results.pathwayProbs[idx] * pathwayValueIdeal;
+              });
+              results.ev = Math.round(idealEVCalc);
+              return results;
+        }
+
+
+        // --- SVG Rendering Function ---
+        function renderTree(svgElement, type, priors, attendedIndices,
+                            pathwayProbs, intermediateEV, finalEV, currentStage, outcomeProbsMap) {
+
+             svgElement.innerHTML = ''; // Clear previous render
+
+             // --- Layout Constants ---
+             const width = 300; // Width of the branching area
+             const centerX = 170; // Center X coordinate of the SVG canvas
+             const leftLabelX = 15; // X coordinate for left-aligned labels
+             const labelOffsetY = 20; // Vertical offset for labels below branching points
+             const rootY = 50;
+             const trunkHeight = 50;
+             const mainBranchY = rootY + trunkHeight; // Y level where pathways diverge (100)
+             const branchHeight = 120;
+             const secondaryBranchY = mainBranchY + branchHeight; // Y level where outcomes diverge (220)
+             const outcomeHeight = 100;
+             const leafY = secondaryBranchY + outcomeHeight; // Y level for outcome nodes (320)
+             const resultGap = 60;
+             const intermediateResultY = leafY + resultGap; // (380)
+             const finalResultY = intermediateResultY + 50; // (430)
+             const stage1LabelY = mainBranchY + labelOffsetY; // Y for stage 1 label (120) - BELOW first branch
+             const stage4LabelY = secondaryBranchY + labelOffsetY; // Y for stage 4 label (240) - BELOW second branch
+
+             const colors = { /* Color definitions (unchanged) */
+                 perfect: { trunk: "#7f8c8d", branch: "#b0bec5", attendedBranch: "#7f8c8d", leafStroke: "#90a4ae", leafFill: "#eceff1", resultStroke: "#34495e", resultText: "#34495e"},
+                 opportunity: { trunk: "#2ecc71", branch: "#abebc6", attendedBranch: "#27ae60", leafStroke: "#2ecc71", leafFill: "#eafaf1", resultStroke: "#27ae60", resultText: "#27ae60"},
+                 risk: { trunk: "#e74c3c", branch: "#f5b7b1", attendedBranch: "#c0392b", leafStroke: "#e74c3c", leafFill: "#fadbd8", resultStroke: "#c0392b", resultText: "#c0392b"}
+             };
+             const col = colors[type];
+             const isBounded = type !== 'perfect';
+             const branchPositions = Array.from({ length: M }, (_, i) => centerX - width / 2 + (width / (M + 1)) * (i + 1));
+
+             // Helper to create SVG elements
+             function createSvgElement(tag, attributes) { /* (unchanged) */
+                 const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
+                 for (const key in attributes) { el.setAttribute(key, attributes[key]); }
+                 return el;
+             }
+
+             // Groups for organizing elements
+             const staticGroup = createSvgElement('g');
+             const labelsGroup = createSvgElement('g');
+             const branchesGroup = createSvgElement('g');
+             const evGroup = createSvgElement('g');
+
+             // --- Static Base Elements ---
+             /* (Novelty indicator, root node, trunk line - unchanged) */
+             const noveltyRect = createSvgElement('rect', { x: centerX - 35, y: 5, width: 70, height: 22, rx: 4, fill: currentNovelty > 0.5 ? "#ffe0b2" : "#cfd8dc", class: "novelty-indicator" });
+             const noveltyText = createSvgElement('text', { x: centerX, y: 16, class: "novelty-text" });
+             noveltyText.textContent = currentNovelty > 0.5 ? "Novel" : "Conventional";
+             staticGroup.appendChild(noveltyRect); staticGroup.appendChild(noveltyText);
+             const rootCircle = createSvgElement('circle', { cx: centerX, cy: rootY, class: "node" });
+             const rootText = createSvgElement('text', { x: centerX, y: rootY, class: "node-text" });
+             rootText.textContent = "Venture";
+             staticGroup.appendChild(rootCircle); staticGroup.appendChild(rootText);
+             const trunkLine = createSvgElement('line', { x1: centerX, y1: rootY + 18, x2: centerX, y2: mainBranchY, stroke: col.trunk, class: "trunk-line" });
+             staticGroup.appendChild(trunkLine);
+
+             // --- Stage 1 Criterion Label (Positioned Left, BELOW first branch) ---
+             const criterionLabel = createSvgElement('text', {
+                 x: leftLabelX,
+                 y: stage1LabelY, // Use calculated Y position
+                 class: `stage1-criterion-label ${currentStage >= 1 ? 'visible' : 'invisible'}`,
+                 fill: col.resultText
+             });
+             criterionLabel.textContent = type === "opportunity" ? "Opportunity Criterion" : type === "risk" ? "Risk Criterion" : "Simultaneous Opportunity/Risk";
+             labelsGroup.appendChild(criterionLabel);
+
+             // --- Process Each Pathway ---
+             branchPositions.forEach((x, i) => {
+                 const isAttended = attendedIndices.includes(i);
+                 const isPruned = isBounded && currentStage >= 2 && !isAttended;
+                 const displayProb = (pathwayProbs?.[i] !== undefined && currentStage >= 3) ? pathwayProbs[i] : (priors[i] ?? 0);
+                 const probPercentText = (displayProb * 100).toFixed(0) + '%';
+                 let branchStrokeWidth = 1 + displayProb * 10;
+                 branchStrokeWidth = Math.max(1, Math.min(branchStrokeWidth, 8));
+
+                 const branchGroup = createSvgElement('g', { id: `${type}-branch-${i}`});
+                 // Apply opacity class for pruning transition
+                 branchGroup.classList.add(isPruned ? 'pruned-group' : 'visible-group');
+
+                 // Branch Line (Pathway)
+                 const branchLine = createSvgElement('line', { /* (attributes unchanged) */
+                     x1: centerX, y1: mainBranchY, x2: x, y2: secondaryBranchY,
+                     class: `branch branch-line`,
+                     stroke: col.branch, "stroke-width": branchStrokeWidth,
+                     display: currentStage >= 0 ? 'inline' : 'none'
+                 });
+                 branchGroup.appendChild(branchLine);
+
+                 // Branch Label (Pathway ID and Probability)
+                 const branchLabel = createSvgElement('text', { /* (attributes unchanged) */
+                     x: x, y: secondaryBranchY - 10,
+                     class: `branch-label`,
+                     fill: '#555', display: currentStage >= 0 ? 'inline' : 'none'
+                 });
+                 branchLabel.textContent = `f${i + 1} (${probPercentText})`;
+                 branchGroup.appendChild(branchLabel);
+
+                 // Outcomes Group
+                 const outcomesGroup = createSvgElement('g', {
+                     class: `outcome-group ${currentStage >= 3 && !isPruned ? 'visible' : 'invisible'}`
+                 });
+                 if (!isPruned) {
+                     OUTCOME_VALUES[i].forEach((value, j) => {
+                         const outcomeX = x + (j - (N-1)/2) * 25;
+                         const outcomeProb = (currentStage >= 4 && outcomeProbsMap && outcomeProbsMap[i] && outcomeProbsMap[i][j] !== undefined)
+                                             ? outcomeProbsMap[i][j] : (1 / N);
+                         let outcomeThickness = 0.5 + outcomeProb * 4;
+                         outcomeThickness = Math.max(0.5, Math.min(3.5, outcomeThickness));
+
+                         const outcomeBranch = createSvgElement('line', { /* (attributes unchanged) */
+                             x1: x, y1: secondaryBranchY, x2: outcomeX, y2: leafY,
+                             class: `outcome-branch`, stroke: col.leafStroke,
+                             "stroke-width": currentStage >= 4 ? outcomeThickness : 1.5
+                         });
+                         const outcomeNode = createSvgElement('circle', { /* (attributes unchanged) */
+                             cx: outcomeX, cy: leafY,
+                             class: `outcome-node`, stroke: col.leafStroke, fill: col.leafFill
+                         });
+                         const outcomeText = createSvgElement('text', { x: outcomeX, y: leafY, class: "outcome-text" });
+                         outcomeText.textContent = value;
+                         outcomesGroup.appendChild(outcomeBranch); outcomesGroup.appendChild(outcomeNode); outcomesGroup.appendChild(outcomeText);
+                     });
+                 }
+                 branchGroup.appendChild(outcomesGroup);
+                 branchesGroup.appendChild(branchGroup);
+
+                 // --- Apply Stage-Specific Styles ---
+                 if (currentStage >= 2) {
+                     if (isPruned) {
+                         branchLabel.classList.add('label-pruned');
+                         branchLine.classList.add('line-pruned'); // Keeps specific line styling if needed
+                     } else {
+                         branchLine.setAttribute('stroke', col.attendedBranch);
+                         branchLabel.setAttribute('fill', col.resultText);
+                     }
+                 } else {
+                     branchLine.setAttribute('stroke', col.branch);
+                     branchLabel.setAttribute('fill', '#555');
+                 }
+             });
+
+             // --- Stage 4 Lens Application Label (Positioned Left, BELOW second branch) ---
+             if (isBounded) {
+                 const stage4LensLabel = createSvgElement('text', {
+                     x: leftLabelX,
+                     y: stage4LabelY, // Use calculated Y position
+                     class: `stage4-lens-label ${currentStage >= 4 ? 'visible' : 'invisible'}`,
+                     fill: (type === 'opportunity' ? colors.risk.resultText : colors.opportunity.resultText)
+                 });
+                 stage4LensLabel.textContent = (type === 'opportunity' ? 'Risk Criterion' : 'Opportunity Criterion');
+                 labelsGroup.appendChild(stage4LensLabel);
+             }
+
+             // --- EV Boxes ---
+             /* (Logic and elements unchanged) */
+             const intermediateVisible = currentStage >= 3 && isBounded;
+             const finalVisible = currentStage >= 4;
+             const perfectEVVisible = currentStage >= 4 && !isBounded;
+
+             if (isBounded) { // Intermediate EV Box
+                 const interEvGroup = createSvgElement('g', { class: intermediateVisible ? 'visible' : 'invisible' });
+                 const interEvBox = createSvgElement('rect', { x: centerX - 55, y: intermediateResultY, width: 110, height: 36, class: `ev-box`, stroke: col.resultStroke });
+                 const interEvLabel = createSvgElement('text', { x: centerX, y: intermediateResultY + 12, class: `ev-label` });
+                 interEvLabel.textContent = "Intermediate EV";
+                 const interEvValue = createSvgElement('text', { x: centerX, y: intermediateResultY + 28, class: `ev-value`, fill: col.resultText });
+                 interEvValue.textContent = intermediateEV ?? '-';
+                 interEvGroup.appendChild(interEvBox); interEvGroup.appendChild(interEvLabel); interEvGroup.appendChild(interEvValue);
+                 evGroup.appendChild(interEvGroup);
+             }
+
+             // Final EV Box (or Ideal EV Box)
+             const finalEvGroup = createSvgElement('g', { class: (finalVisible || perfectEVVisible) ? 'visible' : 'invisible'});
+             const finalEvBoxY = isBounded ? finalResultY : intermediateResultY;
+             const finalEvBox = createSvgElement('rect', { x: centerX - 55, y: finalEvBoxY, width: 110, height: 36, class: `ev-box`, stroke: col.resultStroke, "stroke-width": isBounded ? "2" : "1.5"});
+             const finalEvLabel = createSvgElement('text', { x: centerX, y: finalEvBoxY + 12, class: `ev-label`});
+             finalEvLabel.textContent = "Final Expected Value";
+             const finalEvValue = createSvgElement('text', { x: centerX, y: finalEvBoxY + 28, class: `ev-value final-ev-value`, fill: col.resultText });
+             finalEvValue.textContent = finalEV ?? '-';
+             finalEvGroup.appendChild(finalEvBox); finalEvGroup.appendChild(finalEvLabel); finalEvGroup.appendChild(finalEvValue);
+             evGroup.appendChild(finalEvGroup);
+
+             // Append groups in order (bottom layers first)
+             svgElement.appendChild(staticGroup);
+             svgElement.appendChild(branchesGroup);
+             svgElement.appendChild(labelsGroup); // Labels on top of branches
+             svgElement.appendChild(evGroup);     // EV boxes on top
+        }
+
+        // --- Update Visualization Orchestration ---
+        function updateVisualization() {
+            // --- 1. Recalculate all dependent values ---
+            /* (Calculations identical to previous version) */
+            currentPriors = generatePriors(currentNovelty);
+            oppFirstAttendedIndices = determineAttendedSet_Deterministic(currentPriors, 'O', K);
+            riskFirstAttendedIndices = determineAttendedSet_Deterministic(currentPriors, 'R', K);
+            oppFirstStage1Results.pathwayProbs = calculateStage1Posteriors(currentPriors, OPPORTUNITY_LIKELIHOODS, oppFirstAttendedIndices);
+            riskFirstStage1Results.pathwayProbs = calculateStage1Posteriors(currentPriors, RISK_LIKELIHOODS, riskFirstAttendedIndices);
+            oppFirstStage1Results.ev = calculateIntermediateEV(oppFirstStage1Results.pathwayProbs, oppFirstAttendedIndices, 'O');
+            riskFirstStage1Results.ev = calculateIntermediateEV(riskFirstStage1Results.pathwayProbs, riskFirstAttendedIndices, 'R');
+            oppFirstStage2EV = calculateFinalEV(oppFirstStage1Results.pathwayProbs, oppFirstAttendedIndices, 'R');
+            riskFirstStage2EV = calculateFinalEV(riskFirstStage1Results.pathwayProbs, riskFirstAttendedIndices, 'O');
+            const idealResults = calculateIdealProbsAndEV(currentPriors);
+            idealEV = idealResults.ev;
+            idealPathwayProbs = idealResults.pathwayProbs;
+            currentOutcomeProbs = { ideal: {}, opportunity: {}, risk: {} };
+            for(let i = 0; i < M; i++) {
+                currentOutcomeProbs.ideal[i] = getOutcomeProbs(i, 'Ideal');
+                currentOutcomeProbs.opportunity[i] = getOutcomeProbs(i, 'R');
+                currentOutcomeProbs.risk[i] = getOutcomeProbs(i, 'O');
+            }
+
+            // --- 2. Update DOM Text Content ---
+            /* (Stage descriptions, button states, etc. - unchanged) */
+            stageNumSpan.textContent = currentStage + 1;
+            noveltyValueSpan.textContent = currentNovelty.toFixed(1);
+            prevStageBtn.disabled = currentStage === 0;
+            nextStageBtn.disabled = currentStage === TOTAL_STAGES - 1;
+            const stageDescriptions = [
+                 `Initial State: Prior probabilities displayed based on Novelty (${currentNovelty.toFixed(1)}). Thickness reflects priors.`, // Stage 0 (index 0)
+                 "Mental Simulation: Pathways evaluated via initial lens (Simultaneous, Opportunity or Risk).", // Stage 1
+                 `Attention Allocation: K=${K} pathways selected based on Prior × Criterion Boost. Pruned paths fade.`, // Stage 2
+                 "Criterion 1 Results: Intermediate EV calculated for selected pathways. Branch thickness reflects updated belief (posterior).", // Stage 3
+                 "Criterion 2 Application: Final EV calculated using the second criterion on the previously selected pathways. Outcome branch thickness reflects final outcome probabilities." // Stage 4
+            ];
+            stageDescP.textContent = stageDescriptions[currentStage];
+
+
+            // --- 3. Render Trees ---
+            const getDisplayEV = (stageRequired, value) => currentStage >= stageRequired ? value : undefined;
+
+            renderTree(idealSvg, 'perfect', currentPriors, PERFECT_ATTENDED_INDICES,
+                       idealPathwayProbs, undefined, getDisplayEV(4, idealEV),
+                       currentStage, currentOutcomeProbs.ideal);
+
+            renderTree(oppSvg, 'opportunity', currentPriors, oppFirstAttendedIndices,
+                       oppFirstStage1Results.pathwayProbs, getDisplayEV(3, oppFirstStage1Results.ev), getDisplayEV(4, oppFirstStage2EV),
+                       currentStage, currentOutcomeProbs.opportunity);
+
+            renderTree(riskSvg, 'risk', currentPriors, riskFirstAttendedIndices,
+                       riskFirstStage1Results.pathwayProbs, getDisplayEV(3, riskFirstStage1Results.ev), getDisplayEV(4, riskFirstStage2EV),
+                       currentStage, currentOutcomeProbs.risk);
+        }
+
+        // --- Event Listeners ---
+        /* (Unchanged) */
+        noveltySlider.addEventListener('input', (e) => {
+            currentNovelty = parseFloat(e.target.value);
+            updateVisualization();
+        });
+        prevStageBtn.addEventListener('click', () => {
+            if (currentStage > 0) { currentStage--; updateVisualization(); }
+        });
+        nextStageBtn.addEventListener('click', () => {
+            if (currentStage < TOTAL_STAGES - 1) { currentStage++; updateVisualization(); }
+        });
+
+        // --- Initial Render ---
+        updateVisualization();
+
+    }); // End DOMContentLoaded
+</script>
+
+</body>
+</html>
